@@ -14,8 +14,16 @@ import {
   Clock, 
   UtensilsCrossed, 
   Heart,
-  Copy
+  Copy,
+  ShoppingBag,
+  Flame,
+  ChefHat
 } from 'lucide-react';
+import { MenuItem } from './data/menu';
+import { CartItem } from './types';
+import { MenuSection } from './components/MenuSection';
+import { PreOrderModal } from './components/PreOrderModal';
+import { StickyCartBar } from './components/StickyCartBar';
 
 const FALLBACK_REVIEW_LINK = "https://maps.app.goo.gl/2yqQP6Cr2ZQvLG3KA";
 const MAPS_URL = (import.meta.env.VITE_REVIEW_LINK as string) || FALLBACK_REVIEW_LINK;
@@ -146,10 +154,51 @@ const reviewsData: Record<'mr' | 'en', { stars5: ReviewItem[]; stars4: ReviewIte
 };
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState<'order' | 'reviews'>('order');
   const [lang, setLang] = useState<'mr' | 'en'>('mr');
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
 
+  // Cart operations
+  const handleAddToCart = (item: MenuItem) => {
+    setCart((prev) => {
+      const existing = prev.find((c) => c.id === item.id);
+      if (existing) {
+        return prev.map((c) => (c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
+      }
+      return [...prev, { id: item.id, name: item.name, price: item.price, quantity: 1, unit: item.unit }];
+    });
+    setToastMessage(`✓ ${item.name} कार्टमध्ये जोडले!`);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 2000);
+  };
+
+  const handleUpdateQuantity = (id: string, delta: number) => {
+    setCart((prev) => {
+      return prev
+        .map((c) => {
+          if (c.id === id) {
+            const newQty = c.quantity + delta;
+            return newQty > 0 ? { ...c, quantity: newQty } : null;
+          }
+          return c;
+        })
+        .filter((c): c is CartItem => c !== null);
+    });
+  };
+
+  const handleRemoveItem = (id: string) => {
+    setCart((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const handleClearCart = () => {
+    setCart([]);
+  };
+
+  // Review copy action
   const handleReviewCopy = (review: ReviewItem) => {
     setActiveReviewId(review.id);
     const msg = lang === 'mr' 
@@ -166,12 +215,11 @@ export default function App() {
       fallbackCopy(review.text);
     }
 
-    // Open Google Maps after ~900ms as requested
+    // Open Google Maps after ~900ms
     setTimeout(() => {
       window.open(MAPS_URL, '_blank');
     }, 900);
 
-    // Hide toast after 3.5s
     setTimeout(() => {
       setToastMessage(null);
       setActiveReviewId(null);
@@ -212,11 +260,12 @@ export default function App() {
   };
 
   const currentReviews = reviewsData[lang];
+  const totalItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
     <div className="bg-[#F8F5EE] dark:bg-[#181211] text-[#231714] dark:text-[#F5EFEB] min-h-screen antialiased flex flex-col items-center selection:bg-[#D4AF37] selection:text-[#4A0E17] py-4 sm:py-8 px-3 w-full">
       {/* Desktop Wrapper Framing Centered Mobile Experience (max-width 500px) */}
-      <main className="w-full max-w-[500px] flex flex-col gap-5 sm:gap-6 mx-auto pb-12">
+      <main className="w-full max-w-[500px] flex flex-col gap-5 sm:gap-6 mx-auto pb-24">
         
         {/* ==========================================
            A. HERO SECTION: OFFICIAL LOGO & IDENTITY
@@ -326,93 +375,191 @@ export default function App() {
         </div>
 
         {/* ==========================================
-           C. MAIN REVIEW HERO & STEP INSTRUCTION
+           MAIN NAVIGATION TOGGLE: PRE-ORDER vs REVIEWS
            ========================================== */}
-        <section className="bg-[#FDFBF7] dark:bg-[#221917] rounded-3xl p-5 sm:p-6 shadow-[0_4px_20px_-2px_rgba(74,14,23,0.05),0_2px_6px_-1px_rgba(0,0,0,0.03)] border border-[#E9DFCE] dark:border-[#3A2722] flex flex-col">
-          
-          {/* Top Google Review Pill */}
-          <div className="flex justify-center">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#D4AF37]/15 border border-[#D4AF37]/30 text-[#4A0E17] dark:text-[#D4AF37] text-[11px] font-bold tracking-wider uppercase">
-              ⭐ Google Review
-            </span>
-          </div>
-
-          {/* Headline */}
-          <h2 className="font-serif-dev text-xl sm:text-2xl font-bold text-center text-[#4A0E17] dark:text-[#D4AF37] mt-2.5">
-            {lang === 'mr' ? 'तुमचा अनुभव शेअर करा ❤️' : 'Share Your Experience ❤️'}
-          </h2>
-
-          {/* 3-Step Clear Guidance */}
-          <p className="text-xs sm:text-[13px] text-center font-medium text-gray-600 dark:text-gray-300 mt-1.5 leading-relaxed bg-[#F7F3EB]/80 dark:bg-[#231714]/60 py-2 px-3 rounded-xl border border-[#D4AF37]/20">
-            {lang === 'mr' 
-              ? 'आवडलेला रिव्ह्यू निवडा → कॉपी करा → Google Maps वर Paste करा' 
-              : 'Choose a review → Tap to copy → Paste on Google Maps'}
-          </p>
-
-          {/* D. LANGUAGE SWITCHER (SEGMENTED PILL) */}
-          <div className="flex justify-center mt-4">
-            <div className="inline-flex p-1 bg-[#EDE5D8] dark:bg-[#231714] rounded-xl border border-[#D4AF37]/30" role="tablist" aria-label="Language selector">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={lang === 'mr'}
-                onClick={() => setLang('mr')}
-                className={`px-5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all ${
-                  lang === 'mr' 
-                    ? 'bg-[#5C121D] text-[#FDFBF7] shadow-sm border border-[#D4AF37]/40' 
-                    : 'text-[#231714] dark:text-gray-300 hover:text-[#4A0E17]'
-                }`}
-              >
-                मराठी
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={lang === 'en'}
-                onClick={() => setLang('en')}
-                className={`px-5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all ${
-                  lang === 'en' 
-                    ? 'bg-[#5C121D] text-[#FDFBF7] shadow-sm border border-[#D4AF37]/40' 
-                    : 'text-[#231714] dark:text-gray-300 hover:text-[#4A0E17]'
-                }`}
-              >
-                English
-              </button>
-            </div>
-          </div>
-
-          {/* ==========================================
-             E & F: FEATURED + GROUPED REVIEWS CONTAINER
-             ========================================== */}
-          <div className="mt-5 flex flex-col gap-5">
-            
-            {/* 5-Star Group */}
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <span className="font-serif-dev font-bold text-sm sm:text-base text-[#4A0E17] dark:text-[#D4AF37]">
-                  {lang === 'mr' ? '5 स्टार रिव्ह्यू' : '5 STAR REVIEWS'}
+        <div className="flex justify-center">
+          <div className="inline-flex p-1.5 bg-[#EDE5D8] dark:bg-[#231714] rounded-2xl border border-[#D4AF37]/40 shadow-sm w-full max-w-[420px]">
+            <button
+              type="button"
+              onClick={() => setActiveTab('order')}
+              className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5 ${
+                activeTab === 'order'
+                  ? 'bg-gradient-to-r from-[#4A0E17] to-[#5C121D] text-[#FDFBF7] shadow-md border border-[#D4AF37]/50'
+                  : 'text-[#231714] dark:text-gray-300 hover:text-[#4A0E17]'
+              }`}
+            >
+              <Flame className="w-4 h-4 text-amber-400 fill-amber-400" />
+              <span>Pre-Order मेनू</span>
+              {totalItemCount > 0 && (
+                <span className="bg-[#D4AF37] text-[#3A0A10] text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                  {totalItemCount}
                 </span>
-                <div className="h-px bg-[#D4AF37]/25 flex-1"></div>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('reviews')}
+              className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-1.5 ${
+                activeTab === 'reviews'
+                  ? 'bg-gradient-to-r from-[#4A0E17] to-[#5C121D] text-[#FDFBF7] shadow-md border border-[#D4AF37]/50'
+                  : 'text-[#231714] dark:text-gray-300 hover:text-[#4A0E17]'
+              }`}
+            >
+              <span>⭐ Google Reviews</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ==========================================
+           TAB 1: PRE-ORDER MENU SECTION
+           ========================================== */}
+        {activeTab === 'order' && (
+          <MenuSection 
+            cart={cart}
+            onAddToCart={handleAddToCart}
+            onUpdateQuantity={handleUpdateQuantity}
+            onOpenCart={() => setIsCartOpen(true)}
+          />
+        )}
+
+        {/* ==========================================
+           TAB 2: GOOGLE REVIEWS SECTION (ORIGINAL & VERIFIED)
+           ========================================== */}
+        {activeTab === 'reviews' && (
+          <section className="bg-[#FDFBF7] dark:bg-[#221917] rounded-3xl p-5 sm:p-6 shadow-[0_4px_20px_-2px_rgba(74,14,23,0.05),0_2px_6px_-1px_rgba(0,0,0,0.03)] border border-[#E9DFCE] dark:border-[#3A2722] flex flex-col">
+            
+            {/* Top Google Review Pill */}
+            <div className="flex justify-center">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#D4AF37]/15 border border-[#D4AF37]/30 text-[#4A0E17] dark:text-[#D4AF37] text-[11px] font-bold tracking-wider uppercase">
+                ⭐ Google Review
+              </span>
+            </div>
+
+            {/* Headline */}
+            <h2 className="font-serif-dev text-xl sm:text-2xl font-bold text-center text-[#4A0E17] dark:text-[#D4AF37] mt-2.5">
+              {lang === 'mr' ? 'तुमचा अनुभव शेअर करा ❤️' : 'Share Your Experience ❤️'}
+            </h2>
+
+            {/* 3-Step Clear Guidance */}
+            <p className="text-xs sm:text-[13px] text-center font-medium text-gray-600 dark:text-gray-300 mt-1.5 leading-relaxed bg-[#F7F3EB]/80 dark:bg-[#231714]/60 py-2 px-3 rounded-xl border border-[#D4AF37]/20">
+              {lang === 'mr' 
+                ? 'आवडलेला रिव्ह्यू निवडा → कॉपी करा → Google Maps वर Paste करा' 
+                : 'Choose a review → Tap to copy → Paste on Google Maps'}
+            </p>
+
+            {/* Language Switcher */}
+            <div className="flex justify-center mt-4">
+              <div className="inline-flex p-1 bg-[#EDE5D8] dark:bg-[#231714] rounded-xl border border-[#D4AF37]/30" role="tablist" aria-label="Language selector">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={lang === 'mr'}
+                  onClick={() => setLang('mr')}
+                  className={`px-5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all ${
+                    lang === 'mr' 
+                      ? 'bg-[#5C121D] text-[#FDFBF7] shadow-sm border border-[#D4AF37]/40' 
+                      : 'text-[#231714] dark:text-gray-300 hover:text-[#4A0E17]'
+                  }`}
+                >
+                  मराठी
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={lang === 'en'}
+                  onClick={() => setLang('en')}
+                  className={`px-5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all ${
+                    lang === 'en' 
+                      ? 'bg-[#5C121D] text-[#FDFBF7] shadow-sm border border-[#D4AF37]/40' 
+                      : 'text-[#231714] dark:text-gray-300 hover:text-[#4A0E17]'
+                  }`}
+                >
+                  English
+                </button>
+              </div>
+            </div>
+
+            {/* Grouped Reviews Container */}
+            <div className="mt-5 flex flex-col gap-5">
+              
+              {/* 5-Star Group */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-serif-dev font-bold text-sm sm:text-base text-[#4A0E17] dark:text-[#D4AF37]">
+                    {lang === 'mr' ? '5 स्टार रिव्ह्यू' : '5 STAR REVIEWS'}
+                  </span>
+                  <div className="h-px bg-[#D4AF37]/25 flex-1"></div>
+                </div>
+
+                {currentReviews.stars5.map((review) => {
+                  const isFeatured = review.isFeatured;
+                  return (
+                    <div 
+                      key={review.id}
+                      className={`rounded-2xl p-4 sm:p-4.5 border transition-all duration-200 flex flex-col gap-3 relative ${
+                        isFeatured 
+                          ? 'border-[#D4AF37]/80 dark:border-[#D4AF37]/70 bg-gradient-to-b from-[#FFFDF9] to-[#FDF8F0] dark:from-[#221917] dark:to-[#231714] shadow-md ring-1 ring-[#D4AF37]/30' 
+                          : 'border-[#EADBCC] dark:border-[#3A2722] bg-[#F7F3EB]/60 dark:bg-[#231714]/70 hover:border-[#D4AF37]/50 shadow-sm'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        {renderStars(review.stars)}
+                        {isFeatured && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-[#D4AF37] text-[#3A0A10] shadow-xs">
+                            {lang === 'mr' ? '⭐ सुंदर अनुभव' : '⭐ RECOMMENDED'}
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-base text-[#231714] dark:text-gray-100 font-medium leading-[1.7] select-text">
+                        "{review.text}"
+                      </p>
+
+                      <div className="flex flex-col gap-1.5 mt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleReviewCopy(review)}
+                          className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98] border border-[#D4AF37]/40 group ${
+                            activeReviewId === review.id 
+                              ? 'bg-emerald-700 border-emerald-500' 
+                              : 'bg-[#4A0E17] hover:bg-[#5C121D] active:bg-[#3A0A10]'
+                          }`}
+                        >
+                          <Copy className="w-4 h-4 opacity-90 group-hover:rotate-6 transition-transform" />
+                          <span>
+                            {activeReviewId === review.id 
+                              ? (lang === 'mr' ? '✓ कॉपी झाले! Maps उघडत आहे...' : '✓ Copied! Opening Maps...')
+                              : (lang === 'mr' ? '📋 कॉपी करा आणि रिव्ह्यू द्या' : '📋 Copy & Give Review')}
+                          </span>
+                        </button>
+                        <p className="text-[11px] text-center text-gray-500 dark:text-gray-400">
+                          {lang === 'mr' 
+                            ? 'रिव्ह्यू कॉपी होईल आणि Google Maps उघडेल' 
+                            : 'Review will be copied & Google Maps will open'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
-              {currentReviews.stars5.map((review) => {
-                const isFeatured = review.isFeatured;
-                return (
+              {/* 4-Star Group */}
+              <div className="flex flex-col gap-3 pt-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-serif-dev font-bold text-sm sm:text-base text-[#4A0E17] dark:text-[#D4AF37]">
+                    {lang === 'mr' ? '4 स्टार रिव्ह्यू' : '4 STAR REVIEWS'}
+                  </span>
+                  <div className="h-px bg-[#D4AF37]/25 flex-1"></div>
+                </div>
+
+                {currentReviews.stars4.map((review) => (
                   <div 
                     key={review.id}
-                    className={`rounded-2xl p-4 sm:p-4.5 border transition-all duration-200 flex flex-col gap-3 relative ${
-                      isFeatured 
-                        ? 'border-[#D4AF37]/80 dark:border-[#D4AF37]/70 bg-gradient-to-b from-[#FFFDF9] to-[#FDF8F0] dark:from-[#221917] dark:to-[#231714] shadow-md ring-1 ring-[#D4AF37]/30' 
-                        : 'border-[#EADBCC] dark:border-[#3A2722] bg-[#F7F3EB]/60 dark:bg-[#231714]/70 hover:border-[#D4AF37]/50 shadow-sm'
-                    }`}
+                    className="rounded-2xl p-4 sm:p-4.5 border border-[#EADBCC] dark:border-[#3A2722] bg-[#F7F3EB]/60 dark:bg-[#231714]/70 hover:border-[#D4AF37]/50 shadow-sm transition-all duration-200 flex flex-col gap-3 relative"
                   >
                     <div className="flex items-center justify-between">
                       {renderStars(review.stars)}
-                      {isFeatured && (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-[#D4AF37] text-[#3A0A10] shadow-xs">
-                          {lang === 'mr' ? '⭐ सुंदर अनुभव' : '⭐ RECOMMENDED'}
-                        </span>
-                      )}
                     </div>
 
                     <p className="text-base text-[#231714] dark:text-gray-100 font-medium leading-[1.7] select-text">
@@ -443,133 +590,82 @@ export default function App() {
                       </p>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-
-            {/* 4-Star Group */}
-            <div className="flex flex-col gap-3 pt-2">
-              <div className="flex items-center gap-2">
-                <span className="font-serif-dev font-bold text-sm sm:text-base text-[#4A0E17] dark:text-[#D4AF37]">
-                  {lang === 'mr' ? '4 स्टार रिव्ह्यू' : '4 STAR REVIEWS'}
-                </span>
-                <div className="h-px bg-[#D4AF37]/25 flex-1"></div>
+                ))}
               </div>
 
-              {currentReviews.stars4.map((review) => (
-                <div 
-                  key={review.id}
-                  className="rounded-2xl p-4 sm:p-4.5 border border-[#EADBCC] dark:border-[#3A2722] bg-[#F7F3EB]/60 dark:bg-[#231714]/70 hover:border-[#D4AF37]/50 shadow-sm transition-all duration-200 flex flex-col gap-3 relative"
-                >
-                  <div className="flex items-center justify-between">
-                    {renderStars(review.stars)}
-                  </div>
-
-                  <p className="text-base text-[#231714] dark:text-gray-100 font-medium leading-[1.7] select-text">
-                    "{review.text}"
-                  </p>
-
-                  <div className="flex flex-col gap-1.5 mt-1">
-                    <button
-                      type="button"
-                      onClick={() => handleReviewCopy(review)}
-                      className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98] border border-[#D4AF37]/40 group ${
-                        activeReviewId === review.id 
-                          ? 'bg-emerald-700 border-emerald-500' 
-                          : 'bg-[#4A0E17] hover:bg-[#5C121D] active:bg-[#3A0A10]'
-                      }`}
-                    >
-                      <Copy className="w-4 h-4 opacity-90 group-hover:rotate-6 transition-transform" />
-                      <span>
-                        {activeReviewId === review.id 
-                          ? (lang === 'mr' ? '✓ कॉपी झाले! Maps उघडत आहे...' : '✓ Copied! Opening Maps...')
-                          : (lang === 'mr' ? '📋 कॉपी करा आणि रिव्ह्यू द्या' : '📋 Copy & Give Review')}
-                      </span>
-                    </button>
-                    <p className="text-[11px] text-center text-gray-500 dark:text-gray-400">
-                      {lang === 'mr' 
-                        ? 'रिव्ह्यू कॉपी होईल आणि Google Maps उघडेल' 
-                        : 'Review will be copied & Google Maps will open'}
-                    </p>
-                  </div>
+              {/* 3-Star Group */}
+              <div className="flex flex-col gap-3 pt-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-serif-dev font-bold text-sm sm:text-base text-[#4A0E17] dark:text-[#D4AF37]">
+                    {lang === 'mr' ? '3 स्टार रिव्ह्यू' : '3 STAR REVIEWS'}
+                  </span>
+                  <div className="h-px bg-[#D4AF37]/25 flex-1"></div>
                 </div>
-              ))}
-            </div>
 
-            {/* 3-Star Group */}
-            <div className="flex flex-col gap-3 pt-2">
-              <div className="flex items-center gap-2">
-                <span className="font-serif-dev font-bold text-sm sm:text-base text-[#4A0E17] dark:text-[#D4AF37]">
-                  {lang === 'mr' ? '3 स्टार रिव्ह्यू' : '3 STAR REVIEWS'}
-                </span>
-                <div className="h-px bg-[#D4AF37]/25 flex-1"></div>
+                {currentReviews.stars3.map((review) => (
+                  <div 
+                    key={review.id}
+                    className="rounded-2xl p-4 sm:p-4.5 border border-[#EADBCC] dark:border-[#3A2722] bg-[#F7F3EB]/60 dark:bg-[#231714]/70 hover:border-[#D4AF37]/50 shadow-sm transition-all duration-200 flex flex-col gap-3 relative"
+                  >
+                    <div className="flex items-center justify-between">
+                      {renderStars(review.stars)}
+                    </div>
+
+                    <p className="text-base text-[#231714] dark:text-gray-100 font-medium leading-[1.7] select-text">
+                      "{review.text}"
+                    </p>
+
+                    <div className="flex flex-col gap-1.5 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleReviewCopy(review)}
+                        className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98] border border-[#D4AF37]/40 group ${
+                          activeReviewId === review.id 
+                            ? 'bg-emerald-700 border-emerald-500' 
+                            : 'bg-[#4A0E17] hover:bg-[#5C121D] active:bg-[#3A0A10]'
+                        }`}
+                      >
+                        <Copy className="w-4 h-4 opacity-90 group-hover:rotate-6 transition-transform" />
+                        <span>
+                          {activeReviewId === review.id 
+                            ? (lang === 'mr' ? '✓ कॉपी झाले! Maps उघडत आहे...' : '✓ Copied! Opening Maps...')
+                            : (lang === 'mr' ? '📋 कॉपी करा आणि रिव्ह्यू द्या' : '📋 Copy & Give Review')}
+                        </span>
+                      </button>
+                      <p className="text-[11px] text-center text-gray-500 dark:text-gray-400">
+                        {lang === 'mr' 
+                          ? 'रिव्ह्यू कॉपी होईल आणि Google Maps उघडेल' 
+                          : 'Review will be copied & Google Maps will open'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
 
-              {currentReviews.stars3.map((review) => (
-                <div 
-                  key={review.id}
-                  className="rounded-2xl p-4 sm:p-4.5 border border-[#EADBCC] dark:border-[#3A2722] bg-[#F7F3EB]/60 dark:bg-[#231714]/70 hover:border-[#D4AF37]/50 shadow-sm transition-all duration-200 flex flex-col gap-3 relative"
-                >
-                  <div className="flex items-center justify-between">
-                    {renderStars(review.stars)}
-                  </div>
-
-                  <p className="text-base text-[#231714] dark:text-gray-100 font-medium leading-[1.7] select-text">
-                    "{review.text}"
-                  </p>
-
-                  <div className="flex flex-col gap-1.5 mt-1">
-                    <button
-                      type="button"
-                      onClick={() => handleReviewCopy(review)}
-                      className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98] border border-[#D4AF37]/40 group ${
-                        activeReviewId === review.id 
-                          ? 'bg-emerald-700 border-emerald-500' 
-                          : 'bg-[#4A0E17] hover:bg-[#5C121D] active:bg-[#3A0A10]'
-                      }`}
-                    >
-                      <Copy className="w-4 h-4 opacity-90 group-hover:rotate-6 transition-transform" />
-                      <span>
-                        {activeReviewId === review.id 
-                          ? (lang === 'mr' ? '✓ कॉपी झाले! Maps उघडत आहे...' : '✓ Copied! Opening Maps...')
-                          : (lang === 'mr' ? '📋 कॉपी करा आणि रिव्ह्यू द्या' : '📋 Copy & Give Review')}
-                      </span>
-                    </button>
-                    <p className="text-[11px] text-center text-gray-500 dark:text-gray-400">
-                      {lang === 'mr' 
-                        ? 'रिव्ह्यू कॉपी होईल आणि Google Maps उघडेल' 
-                        : 'Review will be copied & Google Maps will open'}
-                    </p>
-                  </div>
-                </div>
-              ))}
             </div>
 
-          </div>
+            {/* Direct Google Maps Link */}
+            <div className="mt-7 pt-5 border-t border-[#D4AF37]/25 text-center flex flex-col items-center">
+              <p className="text-xs text-gray-600 dark:text-gray-300 font-medium">
+                {lang === 'mr' ? 'Google Maps आधीच उघडायचं आहे?' : 'Want to open Google Maps directly?'}
+              </p>
+              <a 
+                href={MAPS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2.5 inline-flex min-h-[44px] items-center justify-center gap-2 py-2 px-5 rounded-xl border border-[#4A0E17]/30 dark:border-[#D4AF37]/40 bg-white/60 dark:bg-[#231714]/60 text-[#4A0E17] dark:text-[#D4AF37] font-bold text-xs sm:text-sm hover:bg-white dark:hover:bg-[#231714] hover:border-[#D4AF37] transition active:scale-95"
+              >
+                <span>📍</span>
+                <span>{lang === 'mr' ? 'Maps थेट उघडा' : 'Open Maps Directly'}</span>
+                <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+              </a>
+            </div>
 
-          {/* ==========================================
-             G. SECONDARY GOOGLE MAPS LINK
-             ========================================== */}
-          <div className="mt-7 pt-5 border-t border-[#D4AF37]/25 text-center flex flex-col items-center">
-            <p className="text-xs text-gray-600 dark:text-gray-300 font-medium">
-              {lang === 'mr' ? 'Google Maps आधीच उघडायचं आहे?' : 'Want to open Google Maps directly?'}
-            </p>
-            <a 
-              href={MAPS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2.5 inline-flex min-h-[44px] items-center justify-center gap-2 py-2 px-5 rounded-xl border border-[#4A0E17]/30 dark:border-[#D4AF37]/40 bg-white/60 dark:bg-[#231714]/60 text-[#4A0E17] dark:text-[#D4AF37] font-bold text-xs sm:text-sm hover:bg-white dark:hover:bg-[#231714] hover:border-[#D4AF37] transition active:scale-95"
-            >
-              <span>📍</span>
-              <span>{lang === 'mr' ? 'Maps थेट उघडा' : 'Open Maps Directly'}</span>
-              <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-            </a>
-          </div>
-
-        </section>
+          </section>
+        )}
 
         {/* ==========================================
-           H. ORDER CTA CARD
+           H. ORDER / QUICK CALL CTA CARD
            ========================================== */}
         <section className="bg-[#FDFBF7] dark:bg-[#221917] rounded-2xl p-5 sm:p-6 shadow-[0_4px_20px_-2px_rgba(74,14,23,0.05),0_2px_6px_-1px_rgba(0,0,0,0.03)] border border-[#E9DFCE] dark:border-[#3A2722] text-center relative overflow-hidden">
           <div className="absolute -right-10 -bottom-10 w-32 h-32 bg-[#D4AF37]/10 rounded-full blur-xl pointer-events-none"></div>
@@ -697,13 +793,33 @@ export default function App() {
       </main>
 
       {/* ==========================================
+         STICKY CART BAR (WHEN ITEMS IN CART)
+         ========================================== */}
+      <StickyCartBar 
+        cart={cart}
+        onOpenCart={() => setIsCartOpen(true)}
+      />
+
+      {/* ==========================================
+         PRE-ORDER MODAL & CHECKOUT DRAWER
+         ========================================== */}
+      <PreOrderModal
+        isOpen={isCartOpen}
+        onClose={() => setIsCartOpen(false)}
+        cart={cart}
+        onUpdateQuantity={handleUpdateQuantity}
+        onRemoveItem={handleRemoveItem}
+        onClearCart={handleClearCart}
+      />
+
+      {/* ==========================================
          FLOATING TOAST NOTIFICATION
          ========================================== */}
       {toastMessage && (
         <div 
           role="status" 
           aria-live="polite" 
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#3A0A10] text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-[#D4AF37] flex items-center gap-3 z-50 text-xs sm:text-sm font-semibold max-w-[92vw] animate-in fade-in slide-in-from-bottom-4 duration-300"
+          className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-[#3A0A10] text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-[#D4AF37] flex items-center gap-3 z-50 text-xs sm:text-sm font-semibold max-w-[92vw] animate-in fade-in slide-in-from-bottom-4 duration-300"
         >
           <div className="w-6 h-6 rounded-full bg-[#D4AF37] flex items-center justify-center text-[#4A0E17] font-bold shrink-0">
             <Check className="w-4 h-4 stroke-[3]" />
